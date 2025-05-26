@@ -10,7 +10,7 @@ NC='\033[0m' # No Color
 # Default flags for CUDA
 STD="-std=c++17"
 OPT="-O3"
-CUDA_FLAGS="-Wno-deprecated-gpu-targets"
+CUDA_FLAGS="-arch=sm_61 -Wno-deprecated-gpu-targets --ptxas-options=-v"
 
 # Create directories
 mkdir -p bin lib
