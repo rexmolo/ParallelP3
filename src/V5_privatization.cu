@@ -50,12 +50,10 @@ __global__ void V5_privatizationKernel(const float* A, const float* B, float* C,
     }
 }
 
-// Wrapper function for V5
 void runV5Privatization(const float* d_A, const float* d_B, float* d_C, int N, int blockSize) {
-    if (blockSize == 16) {  // Only works with 16x16 blocks
-        dim3 threadsPerBlock(16, 16);
-        dim3 blocksPerGrid((N + 15) / 16, (N + 15) / 16);
-        V5_privatizationKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
-        cudaDeviceSynchronize();
-    }
+    // Always use TILE_SIZE for this kernel, ignore the blockSize parameter
+    dim3 threadsPerBlock(TILE_SIZE, TILE_SIZE);
+    dim3 blocksPerGrid((N + TILE_SIZE - 1) / TILE_SIZE, (N + TILE_SIZE - 1) / TILE_SIZE);
+    V5_privatizationKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    cudaDeviceSynchronize();
 }
