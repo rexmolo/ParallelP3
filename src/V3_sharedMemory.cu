@@ -49,9 +49,7 @@ void runV3SharedMemory(const float* d_A, const float* d_B, float* d_C, int N, in
     dim3 threadsPerBlock(blockSize, blockSize);
     dim3 blocksPerGrid((N + blockSize-1) / blockSize, (N + blockSize-1) / blockSize);
 
-    if (blockSize == 8) {
-        V3_sharedMemoryKernel<8><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
-    } else if (blockSize == 16) {
+    if (blockSize == 16) {
         V3_sharedMemoryKernel<16><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
     } else if (blockSize == 32) {
         V3_sharedMemoryKernel<32><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);

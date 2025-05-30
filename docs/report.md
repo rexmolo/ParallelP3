@@ -13,6 +13,7 @@ Max Threads per Block: 1024
 Max threads per block: 1024
 Max threads per multiprocessor: 2048
 Number of multiprocessors (SMs): 14
+Max Block Dimensions: 1024 x 1024 x 64
 Max threads per GPU: 28672
 
 Global memory size: 8106 MB
@@ -22,7 +23,7 @@ Registers per block: 65536
 CUDA Device: Quadro P4000
 Compute Capability: 6.1
 Max Threads per Block: 1024
-Max Block Dimensions: 1024 x 1024 x 64
+
 
 ## Design Decisions Based on Hardware:
 

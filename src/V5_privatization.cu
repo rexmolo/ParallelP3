@@ -56,9 +56,7 @@ void runV5Privatization(const float* d_A, const float* d_B, float* d_C, int N, i
     // Always use TILE_SIZE for this kernel, ignore the blockSize parameter
     dim3 threadsPerBlock(blockSize, blockSize);
     dim3 blocksPerGrid((N + blockSize - 1) / blockSize, (N + blockSize - 1) / blockSize);
-     if (blockSize == 8) {
-        V5_privatizationKernel<8><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
-    } else if (blockSize == 16) {
+     if (blockSize == 16) {
         V5_privatizationKernel<16><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
     } else if (blockSize == 32) {
         V5_privatizationKernel<32><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
