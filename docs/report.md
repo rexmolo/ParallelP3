@@ -35,6 +35,21 @@ Max Block Dimensions: 1024 x 1024 x 64
 | Registers per thread     | < 64                       | Stay under 65536 registers per block to avoid spilling        |
 
 
+# reference point
+
++----------------+------------+----------------+----------------+
+| Matrix Size    | Block Size | Time (ms)      | Performance    |
+|                |            |                | (GFLOPS)       |
++----------------+------------+----------------+----------------+
+|  512 x  512     | 16 x 16    |      2.745     |      97.80     |
+|  512 x  512     | 32 x 32    |      0.128     |    2096.45     |
+| 1024 x 1024     | 16 x 16    |      1.316     |    1631.29     |
+| 1024 x 1024     | 32 x 32    |      0.752     |    2856.12     |
+| 2048 x 2048     | 16 x 16    |      5.080     |    3381.93     |
+| 2048 x 2048     | 32 x 32    |      5.067     |    3390.78     |
++----------------+------------+----------------+----------------+
+
+
 # V1-- baseline
 
 Running V1 Baseline Kernel
@@ -285,37 +300,3 @@ __global__ void V5_privatizationKernel(const float* A, const float* B, float* C,
 }
 
 
-# reference point
-// V6: cuBLAS implementation - reference implementation
-void runV6CuBLAS(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops) {
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-    
-    const float alpha = 1.0f, beta = 0.0f;
-    
-    auto start = std::chrono::high_resolution_clock::now();
-    
-    // cuBLAS uses column-major order, so we need to transpose the operation
-    // C = A * B becomes C^T = B^T * A^T in column-major
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, N, N, 
-                &alpha, d_B, N, d_A, N, &beta, d_C, N);
-    
-    cudaDeviceSynchronize();
-    auto end = std::chrono::high_resolution_clock::now();
-    
-    time_ms = std::chrono::duration<double, std::milli>(end - start).count();
-    gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
-    
-    cublasDestroy(handle);
-}
-+----------------+------------+----------------+----------------+
-| Matrix Size    | Block Size | Time (ms)      | Performance    |
-|                |            |                | (GFLOPS)       |
-+----------------+------------+----------------+----------------+
-|  512 x  512     | 16 x 16    |      2.745     |      97.80     |
-|  512 x  512     | 32 x 32    |      0.128     |    2096.45     |
-| 1024 x 1024     | 16 x 16    |      1.316     |    1631.29     |
-| 1024 x 1024     | 32 x 32    |      0.752     |    2856.12     |
-| 2048 x 2048     | 16 x 16    |      5.080     |    3381.93     |
-| 2048 x 2048     | 32 x 32    |      5.067     |    3390.78     |
-+----------------+------------+----------------+----------------+
