@@ -30,7 +30,6 @@ void runBenchmark(int N, int blockSize) {
 
     // Conditional compilation for different versions
     #ifdef KERNEL_V1
-        printf("Running V1 Baseline Kernel\n");
         // Warmup
         runV1Baseline(d_A, d_B, d_C, N, blockSize);
         
@@ -40,10 +39,9 @@ void runBenchmark(int N, int blockSize) {
         
         double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
         double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
-        printPerformanceRow("V1_Base", N, blockSize, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #elif defined(KERNEL_V2)
-        printf("Running V2 Loop Unroll Kernel\n");
         // Warmup
         runV2LoopUnroll(d_A, d_B, d_C, N, blockSize);
         
@@ -53,10 +51,9 @@ void runBenchmark(int N, int blockSize) {
         
         double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
         double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
-        printPerformanceRow("V2_Unroll", N, blockSize, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #elif defined(KERNEL_V3)
-        printf("Running V3 Shared Memory Kernel\n");
         // Warmup
         runV3SharedMemory(d_A, d_B, d_C, N, blockSize);
         
@@ -66,10 +63,9 @@ void runBenchmark(int N, int blockSize) {
         
         double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
         double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
-        printPerformanceRow("V3_Shared", N, blockSize, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #elif defined(KERNEL_V4)
-        printf("Running V4 Thread Coarsening Kernel\n");
         // Warmup
         runV4ThreadCoarsening(d_A, d_B, d_C, N, blockSize);
         
@@ -79,10 +75,9 @@ void runBenchmark(int N, int blockSize) {
         
         double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
         double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
-        printPerformanceRow("V4_Coarse", N, blockSize, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #elif defined(KERNEL_V5)
-        printf("Running V5 Privatization Kernel\n");
         // Warmup
         runV5Privatization(d_A, d_B, d_C, N, blockSize);
         
@@ -92,13 +87,12 @@ void runBenchmark(int N, int blockSize) {
         
         double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
         double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
-        printPerformanceRow("V5_Privat", N, blockSize, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #elif defined(KERNEL_V6)
-        printf("Running V6 cuBLAS Kernel\n");
         double time_ms, gflops;
         runV6CuBLAS(d_A, d_B, d_C, N, time_ms, gflops);
-        printPerformanceRow("V6_cuBLAS", N, blockSize, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #else
         printf("No kernel version specified! Use -DKERNEL_V1, -DKERNEL_V2, etc.\n");
@@ -127,6 +121,21 @@ int main() {
     printf("CUDA Device: %s\n", prop.name);
     printf("Compute Capability: %d.%d\n", prop.major, prop.minor);
 
+    // Print version title once at the beginning
+    #ifdef KERNEL_V1
+        printVersionTitle("V1 Baseline Kernel");
+    #elif defined(KERNEL_V2)
+        printVersionTitle("V2 Loop Unroll Kernel");
+    #elif defined(KERNEL_V3)
+        printVersionTitle("V3 Shared Memory Kernel");
+    #elif defined(KERNEL_V4)
+        printVersionTitle("V4 Thread Coarsening Kernel");
+    #elif defined(KERNEL_V5)
+        printVersionTitle("V5 Privatization Kernel");
+    #elif defined(KERNEL_V6)
+        printVersionTitle("V6 cuBLAS Kernel");
+    #endif
+
     printPerformanceHeader();
 
     std::vector<int> matrixSizes = {512, 1024, 2048};
@@ -138,8 +147,9 @@ int main() {
                 runBenchmark(N, blockSize);
             }
         }
-        printf("+----------+----------------+------------+----------------+----------------+\n");
     }
+
+    printTableFooter();
 
     return 0;
 }

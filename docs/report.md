@@ -19,14 +19,25 @@ Global memory size: 8106 MB
 Shared memory per block: 48 KB
 Registers per block: 65536
 
-
-
-# V1-- baseline
-
 CUDA Device: Quadro P4000
 Compute Capability: 6.1
 Max Threads per Block: 1024
 Max Block Dimensions: 1024 x 1024 x 64
+
+# V1-- baseline
+
+__global__ void V1_baselineKernel(const float* A, const float* B, float* C, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < N && col < N) {
+        float sum = 0.0f;
+        for (int k = 0; k < N; ++k) {
+            sum += A[row * N + k] * B[k * N + col];
+        }
+        C[row * N + col] = sum;
+    }
+}
 
 +-----------+------------+----------------+----------------+----------------+
 | Matrix    | Block Size | Threads/Block  | Time (ms)      | Performance    |
@@ -48,6 +59,32 @@ Max Block Dimensions: 1024 x 1024 x 64
 
 
 V2-- unroll
+
+__global__ void V2_loopUnrollKernel(const float* A, const float* B, float* C, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < N && col < N) {
+        float sum = 0.0f;
+        int k = 0;
+        
+        // Unroll loop by 4 to reduce control divergence
+        for (; k <= N - 4; k += 4) {
+            sum += A[row * N + k] * B[k * N + col];
+            sum += A[row * N + k + 1] * B[(k + 1) * N + col];
+            sum += A[row * N + k + 2] * B[(k + 2) * N + col];
+            sum += A[row * N + k + 3] * B[(k + 3) * N + col];
+        }
+        
+        // Handle remaining elements
+        for (; k < N; ++k) {
+            sum += A[row * N + k] * B[k * N + col];
+        }
+        
+        C[row * N + col] = sum;
+    }
+}
+
 +----------+----------------+------------+----------------+----------------+
 | Version  | Matrix Size    | Block Size | Time (ms)      | Performance    |
 |          |                |            |                | (GFLOPS)       |
@@ -71,6 +108,46 @@ Running V2 Loop Unroll Kernel
 
 V3-- shared memory
 
+// V3: Shared memory kernel for memory coalescing optimization
+__global__ void V3_sharedMemoryKernel(const float* A, const float* B, float* C, int N) {
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
+
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    
+    float sum = 0.0f;
+
+    for (int t = 0; t < (N + TILE_SIZE - 1) / TILE_SIZE; ++t) {
+        // Load tiles into shared memory
+        if (row < N && t * TILE_SIZE + threadIdx.x < N) {
+            As[threadIdx.y][threadIdx.x] = A[row * N + t * TILE_SIZE + threadIdx.x];
+        } else {
+            As[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        if (col < N && t * TILE_SIZE + threadIdx.y < N) {
+            Bs[threadIdx.y][threadIdx.x] = B[(t * TILE_SIZE + threadIdx.y) * N + col];
+        } else {
+            Bs[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        __syncthreads();
+
+        // Compute partial sum using shared memory
+        for (int k = 0; k < TILE_SIZE; ++k) {
+            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        }
+
+        __syncthreads();
+    }
+
+    if (row < N && col < N) {
+        C[row * N + col] = sum;
+    }
+}
+
+
 +----------+----------------+------------+----------------+----------------+
 | Version  | Matrix Size    | Block Size | Time (ms)      | Performance    |
 |          |                |            |                | (GFLOPS)       |
@@ -92,7 +169,33 @@ Running V3 Shared Memory Kernel
 +----------+----------------+------------+----------------+----------------+
 
 V4-- coarse-grained
+// V4: Thread coarsening kernel - each thread computes multiple elements
+__global__ void V4_threadCoarseningKernel(const float* A, const float* B, float* C, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col_start = (blockIdx.x * blockDim.x + threadIdx.x) * COARSE_FACTOR;
 
+    if (row < N) {
+        for (int c = 0; c < COARSE_FACTOR; ++c) {
+            int col = col_start + c;
+            if (col < N) {
+                float sum = 0.0f;
+                for (int k = 0; k < N; ++k) {
+                    sum += A[row * N + k] * B[k * N + col];
+                }
+                C[row * N + col] = sum;
+            }
+        }
+    }
+}
+
+// Wrapper function for V4
+void runV4ThreadCoarsening(const float* d_A, const float* d_B, float* d_C, int N, int blockSize) {
+    dim3 threadsPerBlock(blockSize, blockSize);
+    dim3 blocksPerGrid((N + blockSize * COARSE_FACTOR - 1) / (blockSize * COARSE_FACTOR), 
+                       (N + blockSize - 1) / blockSize);
+    V4_threadCoarseningKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    cudaDeviceSynchronize();
+}
 +----------+----------------+------------+----------------+----------------+
 | Version  | Matrix Size    | Block Size | Time (ms)      | Performance    |
 |          |                |            |                | (GFLOPS)       |
@@ -116,6 +219,59 @@ Running V4 Thread Coarsening Kernel
 
 V5-- privatization
 
+// V5: Privatization kernel - register tiling with thread coarsening
+__global__ void V5_privatizationKernel(const float* A, const float* B, float* C, int N) {
+    __shared__ float As[TILE_SIZE][TILE_SIZE];
+    __shared__ float Bs[TILE_SIZE][TILE_SIZE];
+
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+    
+    float results[REG_TILE_SIZE] = {0.0f};
+
+    for (int t = 0; t < (N + TILE_SIZE - 1) / TILE_SIZE; ++t) {
+        // Load data into shared memory
+        if (row < N && t * TILE_SIZE + threadIdx.x < N) {
+            As[threadIdx.y][threadIdx.x] = A[row * N + t * TILE_SIZE + threadIdx.x];
+        } else {
+            As[threadIdx.y][threadIdx.x] = 0.0f;
+        }
+
+        for (int r = 0; r < REG_TILE_SIZE; ++r) {
+            int b_row = t * TILE_SIZE + threadIdx.y;
+            int b_col = col + r * TILE_SIZE;
+            if (b_row < N && b_col < N) {
+                Bs[threadIdx.y][threadIdx.x] = B[b_row * N + b_col];
+            } else {
+                Bs[threadIdx.y][threadIdx.x] = 0.0f;
+            }
+
+            __syncthreads();
+
+            for (int k = 0; k < TILE_SIZE; ++k) {
+                results[r] += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+            }
+
+            __syncthreads();
+        }
+    }
+
+    // Write results
+    for (int r = 0; r < REG_TILE_SIZE; ++r) {
+        int out_col = col + r * TILE_SIZE;
+        if (row < N && out_col < N) {
+            C[row * N + out_col] = results[r];
+        }
+    }
+}
+
+void runV5Privatization(const float* d_A, const float* d_B, float* d_C, int N, int blockSize) {
+    // Always use TILE_SIZE for this kernel, ignore the blockSize parameter
+    dim3 threadsPerBlock(TILE_SIZE, TILE_SIZE);
+    dim3 blocksPerGrid((N + TILE_SIZE - 1) / TILE_SIZE, (N + TILE_SIZE - 1) / TILE_SIZE);
+    V5_privatizationKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    cudaDeviceSynchronize();
+}
 +----------+----------------+------------+----------------+----------------+
 | Version  | Matrix Size    | Block Size | Time (ms)      | Performance    |
 |          |                |            |                | (GFLOPS)       |
@@ -139,6 +295,28 @@ Running V5 Privatization Kernel
 
 
 # reference point
+// V6: cuBLAS implementation - reference implementation
+void runV6CuBLAS(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops) {
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    
+    const float alpha = 1.0f, beta = 0.0f;
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    // cuBLAS uses column-major order, so we need to transpose the operation
+    // C = A * B becomes C^T = B^T * A^T in column-major
+    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, N, N, 
+                &alpha, d_B, N, d_A, N, &beta, d_C, N);
+    
+    cudaDeviceSynchronize();
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    time_ms = std::chrono::duration<double, std::milli>(end - start).count();
+    gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
+    
+    cublasDestroy(handle);
+}
 +----------+----------------+------------+----------------+----------------+
 | Version  | Matrix Size    | Block Size | Time (ms)      | Performance    |
 |          |                |            |                | (GFLOPS)       |

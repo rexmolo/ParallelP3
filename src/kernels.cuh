@@ -17,7 +17,9 @@ void runV5Privatization(const float* d_A, const float* d_B, float* d_C, int N, i
 void runV6CuBLAS(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops);
 
 // Utility functions
+// Add these function declarations to your header file:
+void printVersionTitle(const char* version);
 void printPerformanceHeader();
-void printPerformanceRow(const char* version, int N, int blockSize, double time_ms, double gflops);
-
+void printPerformanceRow(int N, int blockSize, double time_ms, double gflops);
+void printTableFooter();
 #endif // KERNELS_CUH

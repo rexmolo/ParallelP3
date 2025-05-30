@@ -1,8 +1,9 @@
 #include <cuda_runtime.h>
 #include "kernels.cuh"
+#include <cstdio>
 
-#define TILE_SIZE 16
-
+// #define TILE_SIZE 32
+template <int TILE_SIZE>
 // V3: Shared memory kernel for memory coalescing optimization
 __global__ void V3_sharedMemoryKernel(const float* A, const float* B, float* C, int N) {
     __shared__ float As[TILE_SIZE][TILE_SIZE];
@@ -44,10 +45,20 @@ __global__ void V3_sharedMemoryKernel(const float* A, const float* B, float* C, 
 
 // Wrapper function for V3
 void runV3SharedMemory(const float* d_A, const float* d_B, float* d_C, int N, int blockSize) {
-    if (blockSize == 16) {  // Only works with 16x16 blocks due to TILE_SIZE
-        dim3 threadsPerBlock(16, 16);
-        dim3 blocksPerGrid((N + 15) / 16, (N + 15) / 16);
-        V3_sharedMemoryKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
-        cudaDeviceSynchronize();
+
+    dim3 threadsPerBlock(blockSize, blockSize);
+    dim3 blocksPerGrid((N + blockSize-1) / blockSize, (N + blockSize-1) / blockSize);
+
+    if (blockSize == 8) {
+        V3_sharedMemoryKernel<8><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    } else if (blockSize == 16) {
+        V3_sharedMemoryKernel<16><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    } else if (blockSize == 32) {
+        V3_sharedMemoryKernel<32><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    } else {
+        printf("Error: Unsupported block size %d. Supported sizes: 8, 16, 32\n", blockSize);
+        return;
     }
+
+    cudaDeviceSynchronize();
 }
