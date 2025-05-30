@@ -73,7 +73,8 @@ compile_all_kernels() {
     nvcc $STD $OPT $CUDA_FLAGS -c src/V3_sharedMemory.cu -o lib/V3.o
     nvcc $STD $OPT $CUDA_FLAGS -c src/V4_threadCoarsening.cu -o lib/V4.o
     nvcc $STD $OPT $CUDA_FLAGS -c src/V5_privatization.cu -o lib/V5.o
-    nvcc $STD $OPT $CUDA_FLAGS -c src/V6_cublas.cu -o lib/V6.o -lcublas
+    nvcc $STD $OPT $CUDA_FLAGS -c src/V6_final.cu -o lib/V6_final.o
+    nvcc $STD $OPT $CUDA_FLAGS -c src/V0_reference.cu -o lib/V0.o -lcublas
     if [ -f "src/utils.cu" ]; then
         nvcc $STD $OPT $CUDA_FLAGS -c src/utils.cu -o lib/utils.o
     fi
@@ -95,7 +96,7 @@ compile_main_all() {
     echo -e "${BLUE}Compiling main with all kernels...${NC}"
     
     # Link all object files
-    local obj_files="lib/V1.o lib/V2.o lib/V3.o lib/V4.o lib/V5.o lib/V6.o"
+    local obj_files="lib/V1.o lib/V2.o lib/V3.o lib/V4.o lib/V5.o lib/V6_final.o lib/V0.o"
     if [ -f "lib/utils.o" ]; then
         obj_files="$obj_files lib/utils.o"
     fi
@@ -116,12 +117,13 @@ compile_main_all() {
 if [ $# -eq 0 ]; then
     echo "Usage: ./compile.sh [option]"
     echo "Options:"
+    echo "  V0          - Compile V0 reference version"
     echo "  V1          - Compile V1 baseline version"
     echo "  V2          - Compile V2 loop unroll version"
     echo "  V3          - Compile V3 shared memory version"
     echo "  V4          - Compile V4 thread coarsening version"
     echo "  V5          - Compile V5 privatization version"
-    echo "  V6          - Compile V6 cuBLAS version"
+    echo "  V6_final    - Compile V6 final optimized version"
     echo "  all_kernels - Compile all kernels to object files"
     echo "  main_all    - Compile main with all kernels (requires all_kernels first)"
     echo "  all         - Compile all individual versions"
@@ -130,6 +132,9 @@ if [ $# -eq 0 ]; then
 fi
 
 case "$1" in
+    V0|v0)
+        compile_version "V0" "src/V0_reference.cu" "-lcublas"
+        ;;
     V1|v1)
         compile_version "V1" "src/V1_baseline.cu"
         ;;
@@ -145,8 +150,8 @@ case "$1" in
     V5|v5)
         compile_version "V5" "src/V5_privatization.cu"
         ;;
-    V6|v6)
-        compile_version "V6" "src/V6_cublas.cu" "-lcublas"
+    V6_final|v6_final)
+        compile_version "V6_final" "src/V6_final.cu"
         ;;
     all_kernels)
         compile_all_kernels
@@ -160,12 +165,13 @@ case "$1" in
         ;;
     all)
         echo -e "${BLUE}Compiling all individual versions...${NC}"
+        compile_version "V0" "src/V0_reference.cu" "-lcublas" && \
         compile_version "V1" "src/V1_baseline.cu" && \
         compile_version "V2" "src/V2_loopUnroll.cu" && \
         compile_version "V3" "src/V3_sharedMemory.cu" && \
         compile_version "V4" "src/V4_threadCoarsening.cu" && \
         compile_version "V5" "src/V5_privatization.cu" && \
-        compile_version "V6" "src/V6_cublas.cu" "-lcublas"
+        compile_version "V6_final" "src/V6_final.cu"
         echo -e "${GREEN}All versions compiled!${NC}"
         ;;
     clean)
@@ -175,7 +181,7 @@ case "$1" in
         ;;
     *)
         echo "Unknown option: $1"
-        echo "Use one of: V1, V2, V3, V4, V5, V6, all_kernels, main_all, all, clean"
+        echo "Use one of: V0, V1, V2, V3, V4, V5, V6_final, all_kernels, main_all, all, clean"
         exit 1
         ;;
 esac

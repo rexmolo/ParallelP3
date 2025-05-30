@@ -89,9 +89,26 @@ void runBenchmark(int N, int blockSize) {
         double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
         printPerformanceRow(N, blockSize, time_ms, gflops);
         
+    #elif defined(KERNEL_V6_final)
+        // Warmup
+        runV6Final(d_A, d_B, d_C, N, blockSize);
+        
+        auto start = std::chrono::high_resolution_clock::now();
+        runV6Final(d_A, d_B, d_C, N, blockSize);
+        auto end = std::chrono::high_resolution_clock::now();
+        
+        double time_ms = std::chrono::duration<double, std::milli>(end - start).count();
+        double gflops = 2.0 * N * N * N / (time_ms / 1000.0) / 1e9;
+        printPerformanceRow(N, blockSize, time_ms, gflops);
+        
     #elif defined(KERNEL_V6)
         double time_ms, gflops;
         runV6CuBLAS(d_A, d_B, d_C, N, time_ms, gflops);
+        printPerformanceRow(N, blockSize, time_ms, gflops);
+
+    #elif defined(KERNEL_V0)
+        double time_ms, gflops;
+        runV0Reference(d_A, d_B, d_C, N, time_ms, gflops);
         printPerformanceRow(N, blockSize, time_ms, gflops);
         
     #else
@@ -132,8 +149,12 @@ int main() {
         printVersionTitle("V4 Thread Coarsening Kernel");
     #elif defined(KERNEL_V5)
         printVersionTitle("V5 Privatization Kernel");
+    #elif defined(KERNEL_V6_final)
+        printVersionTitle("V6 Final Optimized Kernel");
     #elif defined(KERNEL_V6)
         printVersionTitle("V6 cuBLAS Kernel");
+    #elif defined(KERNEL_V0)
+        printVersionTitle("V0 Reference Kernel");
     #endif
 
     printPerformanceHeader();

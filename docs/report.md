@@ -1,4 +1,4 @@
-# Device version
+## Device version
 
 CUDA Device: Quadro P4000 Pascal
 Compute Capability: 6.1
@@ -35,7 +35,7 @@ Max Block Dimensions: 1024 x 1024 x 64
 | Registers per thread     | < 64                       | Stay under 65536 registers per block to avoid spilling        |
 
 
-# reference point
+## reference point
 
 +----------------+------------+----------------+----------------+
 | Matrix Size    | Block Size | Time (ms)      | Performance    |
@@ -50,7 +50,7 @@ Max Block Dimensions: 1024 x 1024 x 64
 +----------------+------------+----------------+----------------+
 
 
-# V1-- baseline
+## V1-- baseline
 
 Running V1 Baseline Kernel
 +----------------+------------+----------------+----------------+
@@ -80,7 +80,7 @@ __global__ void V1_baselineKernel(const float* A, const float* B, float* C, int 
 }
 
 
-V2-- unroll
+## V2-- unroll
 
 
 Running V2 Loop Unroll Kernel
@@ -123,7 +123,7 @@ __global__ void V2_loopUnrollKernel(const float* A, const float* B, float* C, in
 
 
 
-V3-- shared memory
+## V3-- shared memory
 
 Running V3 Shared Memory Kernel
 +----------------+------------+----------------+----------------+
@@ -180,7 +180,7 @@ __global__ void V3_sharedMemoryKernel(const float* A, const float* B, float* C, 
 
 
 
-V4-- coarse-grained
+## V4-- coarse-grained
 // V4: Thread coarsening kernel - each thread computes multiple elements
 __global__ void V4_threadCoarseningKernel(const float* A, const float* B, float* C, int N) {
     int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -234,7 +234,7 @@ __global__ void V4_threadCoarseningKernel(const float* A, const float* B, float*
 }
 
 
-V5-- privatization
+## V5-- privatization
 
 Running V5 Privatization Kernel
 +----------------+------------+----------------+----------------+
@@ -300,3 +300,92 @@ __global__ void V5_privatizationKernel(const float* A, const float* B, float* C,
 }
 
 
+## V6_final
+
++----------------+------------+----------------+----------------+
+| Matrix Size    | Block Size | Time (ms)      | Performance    |
+|                |            |                | (GFLOPS)       |
++----------------+------------+----------------+----------------+
+|  512 x  512     | 16 x 16    |      0.473     |     567.68     |
+|  512 x  512     | 32 x 32    |      0.467     |     575.11     |
+| 1024 x 1024     | 16 x 16    |      3.616     |     593.85     |
+| 1024 x 1024     | 32 x 32    |      3.609     |     595.11     |
+| 2048 x 2048     | 16 x 16    |     34.344     |     500.23     |
+| 2048 x 2048     | 32 x 32    |     28.578     |     601.17     |
+
+
+
+emplate <int TILE_SIZE>
+__global__ void V6FinalKernel(const float* __restrict__ A, 
+                                    const float* __restrict__ B, 
+                                    float* __restrict__ C, 
+                                    int N) {
+    // Use exactly the same shared memory pattern as reference
+    __shared__ float tile_A[TILE_SIZE][TILE_SIZE + 1];  // +1 padding
+    __shared__ float tile_B[TILE_SIZE][TILE_SIZE + 1];  // +1 padding
+    
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    int row = blockIdx.y * TILE_SIZE + ty;
+    int col = blockIdx.x * TILE_SIZE + tx;
+    
+    float sum = 0.0f;
+        // Add prefetching variables
+    float next_A = 0.0f, next_B = 0.0f;
+    // Ensure perfect memory coalescing like reference implementation
+    for (int k = 0; k < N; k += TILE_SIZE) {
+
+        // Prefetch next iteration data while current computation happens
+        if (k + TILE_SIZE < N) {
+            if (row < N && (k + TILE_SIZE + tx) < N) {
+                next_A = A[row * N + k + TILE_SIZE + tx];
+            }
+            if ((k + TILE_SIZE + ty) < N && col < N) {
+                next_B = B[(k + TILE_SIZE + ty) * N + col];
+            }
+        }
+
+        // Load tiles with optimal access patterns
+        if (row < N && (k + tx) < N) {
+            tile_A[ty][tx] = A[row * N + k + tx];
+        } else {
+            tile_A[ty][tx] = 0.0f;
+        }
+        
+        if ((k + ty) < N && col < N) {
+            tile_B[ty][tx] = B[(k + ty) * N + col];
+        } else {
+            tile_B[ty][tx] = 0.0f;
+        }
+        
+        __syncthreads();
+        
+        // Unrolled inner loop for maximum throughput
+        float sum1 = 0.0f, sum2 = 0.0f, sum3 = 0.0f, sum4 = 0.0f;
+
+        #pragma unroll
+        for (int i = 0; i < TILE_SIZE; i += 4) {
+            float a1 = tile_A[ty][i];
+            float a2 = tile_A[ty][i + 1];
+            float a3 = tile_A[ty][i + 2];
+            float a4 = tile_A[ty][i + 3];
+            
+            float b1 = tile_B[i][tx];
+            float b2 = tile_B[i + 1][tx];
+            float b3 = tile_B[i + 2][tx];
+            float b4 = tile_B[i + 3][tx];
+            
+            sum1 += a1 * b1;
+            sum2 += a2 * b2;
+            sum3 += a3 * b3;
+            sum4 += a4 * b4;
+        }
+        sum += sum1 + sum2 + sum3 + sum4;
+        
+        __syncthreads();
+    }
+    
+    if (row < N && col < N) {
+        C[row * N + col] = sum;
+    }
+}

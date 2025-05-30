@@ -9,15 +9,15 @@ __global__ void V4_threadCoarseningKernel(const float* A, const float* B, float*
 __global__ void V5_privatizationKernel(const float* A, const float* B, float* C, int N);
 
 // Wrapper functions (callable from host)
+void runV0Reference(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops);
 void runV1Baseline(const float* d_A, const float* d_B, float* d_C, int N, int blockSize);
 void runV2LoopUnroll(const float* d_A, const float* d_B, float* d_C, int N, int blockSize);
 void runV3SharedMemory(const float* d_A, const float* d_B, float* d_C, int N, int blockSize);
 void runV4ThreadCoarsening(const float* d_A, const float* d_B, float* d_C, int N, int blockSize);
 void runV5Privatization(const float* d_A, const float* d_B, float* d_C, int N, int blockSize);
-void runV6CuBLAS(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops);
+void runV6Final(const float* d_A, const float* d_B, float* d_C, int N, int blockSize);
 
 // Utility functions
-// Add these function declarations to your header file:
 void printVersionTitle(const char* version);
 void printPerformanceHeader();
 void printPerformanceRow(int N, int blockSize, double time_ms, double gflops);

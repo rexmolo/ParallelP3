@@ -3,8 +3,8 @@
 #include <chrono>
 #include "kernels.cuh"
 
-// V6: cuBLAS implementation - reference implementation
-void runV6CuBLAS(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops) {
+// V0: cuBLAS implementation - reference implementation
+void runV0Reference(const float* d_A, const float* d_B, float* d_C, int N, double& time_ms, double& gflops) {
     cublasHandle_t handle;
     cublasCreate(&handle);
     
