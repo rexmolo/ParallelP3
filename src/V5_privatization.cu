@@ -1,9 +1,11 @@
 #include <cuda_runtime.h>
 #include "kernels.cuh"
+#include <cstdio>
 
-#define TILE_SIZE 16
+// #define TILE_SIZE 16
 #define REG_TILE_SIZE 4
 
+template <int TILE_SIZE>
 // V5: Privatization kernel - register tiling with thread coarsening
 __global__ void V5_privatizationKernel(const float* A, const float* B, float* C, int N) {
     __shared__ float As[TILE_SIZE][TILE_SIZE];
@@ -52,8 +54,18 @@ __global__ void V5_privatizationKernel(const float* A, const float* B, float* C,
 
 void runV5Privatization(const float* d_A, const float* d_B, float* d_C, int N, int blockSize) {
     // Always use TILE_SIZE for this kernel, ignore the blockSize parameter
-    dim3 threadsPerBlock(TILE_SIZE, TILE_SIZE);
-    dim3 blocksPerGrid((N + TILE_SIZE - 1) / TILE_SIZE, (N + TILE_SIZE - 1) / TILE_SIZE);
-    V5_privatizationKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    dim3 threadsPerBlock(blockSize, blockSize);
+    dim3 blocksPerGrid((N + blockSize - 1) / blockSize, (N + blockSize - 1) / blockSize);
+     if (blockSize == 8) {
+        V5_privatizationKernel<8><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    } else if (blockSize == 16) {
+        V5_privatizationKernel<16><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    } else if (blockSize == 32) {
+        V5_privatizationKernel<32><<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+    } else {
+        printf("Error: Unsupported block size %d. Supported sizes: 8, 16, 32\n", blockSize);
+        return;
+    }
+
     cudaDeviceSynchronize();
 }
